@@ -1,0 +1,12 @@
+# Local-dev only. Auto-applies the schema when the `db` container is
+# created with a fresh volume. Files run alphabetically:
+#   000_stubs.sql         — stubs Supabase-only `auth.jwt()` for local postgres
+#   001_core_schema.sql   — tables + pgvector + seeded tools
+#   002_rls_policies.sql  — RLS (works locally thanks to the stub)
+# Supabase cloud keeps using both migrations applied manually in its SQL editor.
+services:
+  db:
+    volumes:
+      - ./local-init/000_stubs.sql:/docker-entrypoint-initdb.d/000_stubs.sql:ro
+      - ./supabase/migrations/001_core_schema.sql:/docker-entrypoint-initdb.d/001_core_schema.sql:ro
+      - ./supabase/migrations/002_rls_policies.sql:/docker-entrypoint-initdb.d/002_rls_policies.sql:ro

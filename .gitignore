@@ -1,0 +1,23 @@
+# Local secrets and environment files
+.env
+.env.*
+!.env.example
+
+# Build outputs and local state
+**/node_modules/
+**/.next/
+**/target/
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.venv/
+**/venv/
+ml-service/models/
+*.joblib
+*.csv
+*.log
+.DS_Store
+tmp/
+.idea/
+.vscode/*
+!.vscode/settings.json

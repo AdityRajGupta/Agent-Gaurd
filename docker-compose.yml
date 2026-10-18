@@ -1,0 +1,78 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: agentguard
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # NOTE: schema auto-migration lives in docker-compose.override.yml
+    # (mounts local-init/000_stubs.sql + supabase/migrations into
+    # docker-entrypoint-initdb.d). Do NOT add mounts here — duplicate
+    # container paths across base + override files break Compose.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    ports:
+      - "8080:8080"
+    env_file: .env
+    environment:
+      DATABASE_URL: jdbc:postgresql://db:5432/agentguard
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      # backend runs inside docker — must reach mcp-servers by service name,
+      # NOT localhost (compose `environment:` overrides .env, so set it here)
+      MCP_SERVER_URL: http://mcp-servers:8002
+      MCP_SERVER_TOKEN: ${MCP_SERVER_TOKEN:-local-agentguard-mcp-token}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      # Phase 4 LLM: host.docker.internal reaches Ollama on the Mac host.
+      # "auto" (default): prefer GROQ/GEMINI free-tier keys when set, else Ollama.
+      LLM_PROVIDER: ${LLM_PROVIDER:-auto}
+      OLLAMA_URL: http://host.docker.internal:11434
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  ml-service:
+    build: ./ml-service
+    ports:
+      - "8001:8001"
+    env_file: .env
+
+  mcp-servers:
+    build: ./mcp-servers
+    ports:
+      - "8002:8002"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/agentguard
+      WORKSPACE_DIR: /tmp/agent-workspace
+      MCP_SERVER_TOKEN: ${MCP_SERVER_TOKEN:-local-agentguard-mcp-token}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # NEXT_PUBLIC_* is inlined at Next.js build time, so it must be a
+        # build arg, not just runtime env. Point at your backend URL.
+        NEXT_PUBLIC_API_URL: http://localhost:8080/api/v1
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    profiles: ["ui"]  # opt-in: docker compose --profile ui up --build
+
+volumes:
+  pgdata:
