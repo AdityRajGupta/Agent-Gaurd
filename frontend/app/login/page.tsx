@@ -10,11 +10,14 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [slow, setSlow] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setBusy(true);
+    setSlow(false);
+    const slowHint = window.setTimeout(() => setSlow(true), 5000);
     try {
       const { token } = await api.login(username, password);
       setToken(token);
@@ -22,7 +25,9 @@ export default function LoginPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
+      window.clearTimeout(slowHint);
       setBusy(false);
+      setSlow(false);
     }
   };
 
@@ -38,6 +43,7 @@ export default function LoginPage() {
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             autoComplete="username"
+            autoFocus
             required
           />
         </div>
@@ -52,9 +58,10 @@ export default function LoginPage() {
             required
           />
         </div>
-        {error && <div className="error">{error}</div>}
+        {slow && <p className="login-wait" role="status">Waking the workspace can take up to a minute when it has been idle.</p>}
+        {error && <div className="error" role="alert">{error}</div>}
         <button type="submit" disabled={busy}>
-          {busy ? 'Logging in…' : 'Log in'}
+          {busy ? 'Connecting…' : 'Log in'}
         </button>
       </form>
     </div>

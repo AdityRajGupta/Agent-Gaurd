@@ -1,10 +1,13 @@
 // Typed client for the AgentGuard backend API.
-// Base URL from NEXT_PUBLIC_API_URL (default http://localhost:8080/api/v1).
+// Explicit environment configuration always wins. The production fallback keeps
+// a misconfigured Vercel build from silently sending users to localhost.
 // JWT is stored in localStorage under 'ag_token' and sent as
 // `Authorization: Bearer <token>` on every request.
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
+const API_URL = process.env.NEXT_PUBLIC_API_URL ||
+  (process.env.NODE_ENV === 'production'
+    ? 'https://agentguard-backend-9d3x.onrender.com/api/v1'
+    : 'http://localhost:8080/api/v1');
 
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -32,8 +35,16 @@ export async function apiFetch<T = unknown>(
 
   let res: Response;
   try {
-    res = await fetch(`${API_URL}${path}`, { ...options, headers });
+    res = await fetch(`${API_URL}${path}`, {
+      ...options,
+      headers,
+      cache: 'no-store',
+      signal: options.signal ?? AbortSignal.timeout(90_000),
+    });
   } catch (e) {
+    if (e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError')) {
+      throw new Error('The API is taking too long to respond. It may be waking from an idle period — please try again shortly.');
+    }
     throw new Error(
       `Cannot reach the API at ${API_URL} — is the backend running?`,
     );
@@ -45,7 +56,12 @@ export async function apiFetch<T = unknown>(
   }
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(text || `Request failed (HTTP ${res.status})`);
+    let message = text;
+    try {
+      const body = JSON.parse(text);
+      message = body.message || body.error || text;
+    } catch { /* Keep plain-text API errors readable. */ }
+    throw new Error(message || `Request failed (HTTP ${res.status})`);
   }
   const text = await res.text();
   return (text ? JSON.parse(text) : null) as T;
@@ -124,8 +140,11 @@ export const api = {
   login: (username: string, password: string): Promise<{ token: string }> =>
     apiFetch('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username: username.trim(), password }),
     }),
+
+  health: (): Promise<{ status: string; service: string }> =>
+    apiFetch('/health'),
 
   listAgents: (): Promise<Agent[]> => apiFetch('/agents'),
 

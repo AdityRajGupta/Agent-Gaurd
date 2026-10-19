@@ -18,6 +18,8 @@ public class ApiExceptionHandler {
         : exception.getMostSpecificCause().getMessage();
     String message = detail != null && detail.contains("agent_identities_name_key")
         ? "An agent with this name already exists"
+        : detail != null && detail.contains("policies_agent_id_tool_id_key")
+            ? "A policy for this agent and tool already exists"
         : "The request conflicts with existing data";
     return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
         "error", "conflict",
